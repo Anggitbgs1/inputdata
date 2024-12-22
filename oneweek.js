@@ -1,11 +1,12 @@
 const { chromium } = require('playwright');
+const fs = require('fs');
 
 (async () => {
     const browser = await chromium.launch({ headless: false });
     console.log('Browser launched');
 
     // Fungsi untuk memproses satu batch data
-    const processBatch = async (batch, browser) => {
+    const processBatch = async (entry, browser) => {
         const context = await browser.newContext();
         const page = await context.newPage();
         console.log('New page created for batch processing');
@@ -32,61 +33,58 @@ const { chromium } = require('playwright');
             { name: "18. Saya akan mencari tahu mengenai " },
         ];
 
-        for (const entry of batch) {
-            const [name, email, gender, age, occupation, ...responses] = entry.split(',').map(item => item.trim());
+        const [name, email, gender, age, occupation, ...responses] = entry.split(',').map(item => item.trim());
 
-            try {
-                console.log(`Processing form for ${name} (${email})`);
+        try {
+            console.log(`Processing form for ${name} (${email})`);
 
-                await page.goto("https://forms.gle/yj2nQd6iPqPzEw816", { waitUntil: 'networkidle' });
-                console.log(`Navigated to form for ${name}`);
+            await page.goto("https://forms.gle/yj2nQd6iPqPzEw816", { waitUntil: 'networkidle' });
+            console.log(`Navigated to form for ${name}`);
 
-                // Isi form
-                await page.getByLabel("Email Anda").fill(email);
-                console.log(`Filled email for ${name}`);
-                await page.getByLabel("Nama *").fill(name);
-                console.log(`Filled name for ${name}`);
-                await page.getByLabel(gender).click();
-                console.log(`Selected gender for ${name}`);
-                await page.getByLabel(age).click();
-                console.log(`Selected age for ${name}`);
+            // Isi form
+            await page.getByLabel("Email Anda").fill(email);
+            console.log(`Filled email for ${name}`);
+            await page.getByLabel("Nama *").fill(name);
+            console.log(`Filled name for ${name}`);
+            await page.getByLabel(gender).click();
+            console.log(`Selected gender for ${name}`);
+            await page.getByLabel(age).click();
+            console.log(`Selected age for ${name}`);
 
-                // Menangani pekerjaan secara lebih hati-hati
-                const occupationLabel = occupation === "Pekerja" ? "Pekerja" : occupation;
-                console.log(`Selecting occupation: ${occupationLabel}`);
-                await page.waitForSelector(`label:has-text("${occupationLabel}")`);
-                await page.locator(`label:has-text("${occupationLabel}")`).click();
-                console.log(`Selected occupation for ${name}`);
+            // Menangani pekerjaan secara lebih hati-hati
+            const occupationLabel = occupation === "Pekerja" ? "Pekerja" : occupation;
+            console.log(`Selecting occupation: ${occupationLabel}`);
+            await page.waitForSelector(`label:has-text("${occupationLabel}")`);
+            await page.locator(`label:has-text("${occupationLabel}")`).click();
+            console.log(`Selected occupation for ${name}`);
 
-                await page.getByRole("button", { name: "Berikutnya" }).click();
-                console.log(`Clicked next button for ${name}`);
+            await page.getByRole("button", { name: "Berikutnya" }).click();
+            console.log(`Clicked next button for ${name}`);
 
-                // Isi jawaban
-                for (let i = 0; i < responses.length; i++) {
-                    const questionName = questions[i].name;
-                    const responseValue = responses[i];
+            // Isi jawaban
+            for (let i = 0; i < responses.length; i++) {
+                const questionName = questions[i].name;
+                const responseValue = responses[i];
 
-                    console.log(`Answering question: "${questionName}" with response: "${responseValue}"`);
-                    await page.getByLabel(questionName).getByLabel(responseValue).click();
-                }
-
-                await page.getByRole("button", { name: "Submit" }).click();
-                console.log(`Form submitted for ${name} (${email})`);
-                await page.waitForTimeout(1000); // Menunggu agar form dapat disubmit dengan benar
-
-            } catch (error) {
-                console.error(`Error processing entry for ${name} (${email}):`, error);
-                await page.screenshot({ path: `error-${name}-${email}.png` });
-                console.log(`Screenshot saved for error with ${name} (${email})`);
+                console.log(`Answering question: "${questionName}" with response: "${responseValue}"`);
+                await page.getByLabel(questionName).getByLabel(responseValue).click();
             }
-        }
 
-        await context.close();
-        console.log('Batch processing completed and context closed');
+            await page.getByRole("button", { name: "Submit" }).click();
+            console.log(`Form submitted for ${name} (${email})`);
+            await page.waitForTimeout(1000); // Menunggu agar form dapat disubmit dengan benar
+
+        } catch (error) {
+            console.error(`Error processing entry for ${name} (${email}):`, error);
+            await page.screenshot({ path: `error-${name}-${email}.png` });
+            console.log(`Screenshot saved for error with ${name} (${email})`);
+        } finally {
+            await context.close();
+            console.log('Context closed');
+        }
     };
 
     // Baca data dari file
-    const fs = require('fs');
     const data = fs.readFileSync('data.txt', 'utf-8');
     const entries = data.split('\n').filter(line => line.trim());
     console.log(`Loaded ${entries.length} entries from data.txt`);
@@ -100,6 +98,8 @@ const { chromium } = require('playwright');
         randomDataDistribution[randomDay].push(entry);
     });
 
+    const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
     for (let day = 0; day < days; day++) {
         const batch = randomDataDistribution[day];
 
@@ -111,9 +111,14 @@ const { chromium } = require('playwright');
             const randomDelay = Math.random() * (3600 * 1000); // Delay antara 0 hingga 1 jam
 
             console.log(`Waiting for ${Math.floor(randomDelay / 1000)} seconds before next entry`);
-            await new Promise(resolve => setTimeout(resolve, randomDelay));
+            await sleep(randomDelay);
 
-            await processBatch([batch[i]], browser);
+            await processBatch(batch[i], browser);
+        }
+
+        if (day < days - 1) {
+            console.log(`Day ${day + 1} completed. Waiting until next day...`);
+            await sleep(24 * 3600 * 1000); // Tunggu 24 jam sebelum melanjutkan hari berikutnya
         }
     }
 
